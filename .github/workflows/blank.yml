@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  VALIDATION_RESULT: "false"   # change to true/false for testing
+  VALIDATION_RESULT: "true"   # change to true/false for testing
 
 jobs:
 
