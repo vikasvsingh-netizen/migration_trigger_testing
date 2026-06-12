@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+env:
+  VALIDATION_RESULT: "false"   # change to true/false for testing
+
 jobs:
 
   deploy-db:
@@ -16,27 +19,25 @@ jobs:
 
     steps:
 
-      - name: Trigger employee-db-migration Migration
+      - name: Trigger Migration
         env:
           TOKEN: ${{ secrets.EMPLOYEEDBMIGRATIONPAT }}
         run: |
 
           curl -X POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer $TOKEN" \
-          https://api.github.com/repos/vikasvsingh-netizen/employee-db-migrations/actions/workflows/migrate.yml/dispatches \
-          -d '{"ref":"dev"}'
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            https://api.github.com/repos/vikasvsingh-netizen/employee-db-migrations/actions/workflows/migrate.yml/dispatches \
+            -d '{"ref":"dev"}'
 
       - name: Wait 10 sec
         run: sleep 10
 
-      - name: Wait for Workflow Completion
+      - name: Wait for Migration Completion
         id: wait
         env:
           TOKEN: ${{ secrets.EMPLOYEEDBMIGRATIONPAT }}
         run: |
-
-          WORKFLOW_NAME="Database Migration"
 
           while true
           do
@@ -69,3 +70,77 @@ jobs:
             sleep 15
 
           done
+
+  validation:
+
+    needs: deploy-db
+
+    if: needs.deploy-db.result == 'success'
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      validation_success: ${{ steps.validate.outputs.success }}
+
+    steps:
+
+      - name: Fake Validation
+        id: validate
+        run: |
+
+          echo "VALIDATION_RESULT=${VALIDATION_RESULT}"
+
+          if [ "${VALIDATION_RESULT}" = "true" ]; then
+            echo "success=true" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  rollback-on-migration-failure:
+
+    needs: deploy-db
+
+    if: failure() && needs.deploy-db.result == 'failure'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Trigger Rollback
+        env:
+          TOKEN: ${{ secrets.EMPLOYEEDBMIGRATIONPAT }}
+        run: |
+
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            https://api.github.com/repos/vikasvsingh-netizen/employee-db-migrations/actions/workflows/rollback.yml/dispatches \
+            -d '{"ref":"dev"}'
+
+  rollback-on-validation-failure:
+
+    needs:
+      - deploy-db
+      - validation
+
+    if: needs.deploy-db.result == 'success' && needs.validation.result == 'failure'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Trigger Rollback
+        env:
+          TOKEN: ${{ secrets.EMPLOYEEDBMIGRATIONPAT }}
+        run: |
+
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            https://api.github.com/repos/vikasvsingh-netizen/employee-db-migrations/actions/workflows/rollback.yml/dispatches \
+            -d '{"ref":"dev"}'
+
+      - name: Fail Pipeline
+        run: exit 1
