@@ -125,7 +125,7 @@ jobs:
       - deploy-db
       - validation
 
-    if: needs.deploy-db.result == 'success' && needs.validation.result == 'failure'
+    if: always() && needs.deploy-db.result == 'success' && needs.validation.result == 'failure'
 
     runs-on: ubuntu-latest
 
